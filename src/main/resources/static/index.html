@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>TDA Game Analytics Platform</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .page { display: none; }
+        .active-page { display: block; }
+        .metric-card { transition: transform 0.2s; }
+        .metric-card:hover { transform: scale(1.02); }
+        .admin-only { display: none; }
+    </style>
+</head>
+<body class="bg-light">
+<!-- Навигация -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="#" onclick="showPage('profile')">TDA Game Analytics Platform</a>
+        <div class="navbar-nav">
+            <button class="btn btn-link nav-link" onclick="showPage('profile')">Профиль</button>
+            <button class="btn btn-link nav-link admin-only" onclick="showPage('admin')">Админка</button>
+            <button class="btn btn-link nav-link" onclick="logout()">Выйти</button>
+        </div>
+    </div>
+</nav>
+
+<!-- Страница регистрации -->
+<div id="register-page" class="page container mt-5 active-page">
+    <div class="card col-md-6 mx-auto">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Регистрация</h2>
+            <form onsubmit="handleRegister(event)">
+                <div class="mb-3">
+                    <input type="text" class="form-control" placeholder="Имя пользователя" required>
+                </div>
+                <div class="mb-3">
+                    <input type="email" class="form-control" placeholder="Email" required>
+                </div>
+                <div class="mb-3">
+                    <input type="password" class="form-control" placeholder="Пароль" required>
+                </div>
+                <div class="mb-3">
+                    <input type="password" class="form-control" placeholder="Подтвердите пароль" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Зарегистрироваться</button>
+            </form>
+            <div class="mt-3 text-center">
+                Уже есть аккаунт? <a href="#" onclick="showPage('login')">Войти</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Страница входа -->
+<div id="login-page" class="page container mt-5">
+    <div class="card col-md-6 mx-auto">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Вход в систему</h2>
+            <form onsubmit="handleLogin(event)">
+                <div class="mb-3">
+                    <input type="email" class="form-control" placeholder="Email" required>
+                </div>
+                <div class="mb-3">
+                    <input type="password" class="form-control" placeholder="Пароль" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Войти</button>
+            </form>
+            <div class="mt-3 text-center">
+                Нет аккаунта? <a href="#" onclick="showPage('register')">Создать</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Страница профиля -->
+<div id="profile-page" class="page container mt-4">
+    <h2 class="mb-4">Ваши проекты</h2>
+    <div id="projects-container" class="row row-cols-1 row-cols-md-3 g-4">
+        <!-- Проекты будут здесь -->
+    </div>
+</div>
+
+<!-- Страница проекта -->
+<div id="project-page" class="page container mt-4">
+    <button class="btn btn-secondary mb-3" onclick="showPage('profile')">← Назад</button>
+    <h2 id="project-title" class="mb-4"></h2>
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h5>FPS</h5>
+                    <canvas id="fpsChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h5>Память</h5>
+                    <canvas id="memoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Детальная статистика</h5>
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Метрика</th>
+                            <th>Значение</th>
+                        </tr>
+                        </thead>
+                        <tbody id="metrics-table">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Модели данных
+    class AuthResponse {
+        constructor(token, userId, email, username, role) {
+            this.token = token;
+            this.userId = userId;
+            this.email = email;
+            this.username = username;
+            this.role = role;
+        }
+    }
+
+    // Глобальные переменные
+    let currentUser = null;
+    let projects = [];
+
+    // Инициализация
+    window.onload = () => {
+        const storedUser = localStorage.getItem('user');
+        if(storedUser) {
+            currentUser = Object.assign(new AuthResponse(), JSON.parse(storedUser));
+            loadProfile();
+        } else {
+            showPage('login');
+        }
+        updateRoleVisibility();
+    };
+
+    // Управление страницами
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+        document.getElementById(`${pageId}-page`).classList.add('active-page');
+    }
+
+    // Обработка регистрации
+    async function handleRegister(e) {
+        e.preventDefault();
+        const [username, email, password, confirmPassword] = e.target.elements;
+
+        if(password.value !== confirmPassword.value) {
+            return alert('Пароли не совпадают');
+        }
+
+        try {
+            const response = await fetch('/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: username.value,
+                    email: email.value,
+                    password: password.value,
+                    confirmPassword: confirmPassword.value
+                })
+            });
+
+            const text = await response.text();
+            if (!text) { // Обрабатываем пустой ответ
+                throw new Error("Empty response");
+            }
+
+            const data = JSON.parse(text);
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Registration failed');
+            }
+
+            currentUser = new AuthResponse(
+                data.token,
+                data.userId,
+                data.email,
+                data.username,
+                data.role
+            );
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            loadProfile();
+        } catch(error) {
+            console.error('Ошибка регистрации:', error);
+            alert(error.message || 'Не удалось зарегистрироваться');
+        }
+    }
+
+    // Обработка входа
+    async function handleLogin(e) {
+        e.preventDefault();
+        const [email, password] = e.target.elements;
+
+        try {
+            const response = await fetch('/auth/authenticate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.value, password: password.value })
+            });
+
+            const text = await response.text();
+            if (!text) { // Обрабатываем пустой ответ
+                throw new Error("Empty response");
+            }
+
+            const data = JSON.parse(text);
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Authentication failed');
+            }
+
+            currentUser = new AuthResponse(
+                data.token,
+                data.userId,
+                data.email,
+                data.username,
+                data.role
+            );
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            loadProfile();
+        } catch(error) {
+            console.error('Ошибка входа:', error);
+            alert(error.message || 'Неверные учетные данные');
+        }
+    }
+
+    // Загрузка профиля
+    async function loadProfile() {
+        try {
+            const response = await fetch('/api/projects/stats', {
+                headers: getAuthHeaders()
+            });
+
+            // Добавляем проверку успешности ответа
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            // Проверяем Content-Type
+            const contentType = response.headers.get('content-type');
+            if (!contentType?.includes('application/json')) {
+                throw new Error("Invalid content type");
+            }
+
+            // Парсим JSON
+            const data = await response.json();
+
+            // Гарантируем, что projects - всегда массив
+            projects = Array.isArray(data) ? data : [];
+
+            renderProjects();
+            showPage('profile');
+            updateRoleVisibility();
+        } catch(error) {
+            console.error('Ошибка загрузки проектов:', error);
+
+            // Улучшенная обработка 401
+            if (error.message.includes('401') || error instanceof SyntaxError) {
+                logout();
+            } else {
+                alert(`Ошибка загрузки: ${error.message}`);
+            }
+        }
+    }
+
+    // Формирование заголовков с токеном
+    function getAuthHeaders(additionalHeaders = {}) {
+        return {
+            ...additionalHeaders,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser?.token || ''}`
+        };
+    }
+
+    // Рендер проектов
+    function renderProjects() {
+        const container = document.getElementById('projects-container');
+        container.innerHTML = projects.map(project => `
+            <div class="col">
+                <div class="card h-100" onclick="showProject('${project.id}')">
+                    <div class="card-body">
+                        <h5 class="card-title">${project.name}</h5>
+                        <p class="card-text">
+                            <span class="badge bg-primary">FPS: ${project.metrics?.system?.fps || 0}</span>
+                            <span class="badge bg-success">Память: ${project.metrics?.system?.memory || 0}MB</span>
+                            <span class="badge bg-info">${project.metrics?.session?.deviceInfo?.platform || 'N/A'}</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Показ проекта
+    function showProject(projectId) {
+        const project = projects.find(p => p.id === projectId);
+        document.getElementById('project-title').textContent = project.name;
+
+        renderCharts(project.metrics);
+        renderMetricsTable(project.metrics);
+        showPage('project');
+    }
+
+    // Рендер графиков
+    function renderCharts(metrics) {
+        // FPS Chart
+        new Chart(document.getElementById('fpsChart'), {
+            type: 'line',
+            data: {
+                labels: metrics.session?.timestamp ? [metrics.session.timestamp] : ['Текущий'],
+                datasets: [{
+                    label: 'FPS',
+                    data: metrics.system?.fpsHistory || [metrics.system?.fps || 0],
+                    borderColor: '#4e73df'
+                }]
+            }
+        });
+
+        // Memory Chart
+        new Chart(document.getElementById('memoryChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Использовано', 'Свободно'],
+                datasets: [{
+                    label: 'Память (MB)',
+                    data: [metrics.system?.memory || 0, 1000 - (metrics.system?.memory || 0)],
+                    backgroundColor: ['#1cc88a', '#e74a3b']
+                }]
+            }
+        });
+    }
+
+    // Рендер таблицы метрик
+    function renderMetricsTable(metrics) {
+        const tableBody = document.getElementById('metrics-table');
+        tableBody.innerHTML = `
+            <tr>
+                <td>Загрузка уровня</td>
+                <td>${metrics?.custom?.loadTime || 'N/A'}ms</td>
+            </tr>
+            <tr>
+                <td>Прогресс уровня</td>
+                <td>${metrics?.custom?.levelProgress || 0}%</td>
+            </tr>
+            <tr>
+                <td>Браузер</td>
+                <td>${metrics?.session?.deviceInfo?.userAgent || 'N/A'}</td>
+            </tr>
+            <tr>
+                <td>ОС</td>
+                <td>${metrics?.session?.deviceInfo?.platform || 'N/A'}</td>
+            </tr>
+        `;
+    }
+
+    // Управление отображением ролей
+    function updateRoleVisibility() {
+        const adminElements = document.querySelectorAll('.admin-only');
+        adminElements.forEach(el => {
+            el.style.display = currentUser?.role === 'ADMIN' ? 'block' : 'none';
+        });
+    }
+
+    // Выход
+    function logout() {
+        currentUser = null;
+        localStorage.removeItem('user');
+        showPage('login');
+    }
+
+    // Глобальный обработчик ошибок
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error('Глобальная ошибка:', { message, source, lineno, colno, error });
+        alert('Произошла ошибка, проверьте консоль');
+        return true;
+    };
+</script>
+</body>
+</html>

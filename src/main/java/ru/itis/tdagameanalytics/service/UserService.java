@@ -1,5 +1,6 @@
 package ru.itis.tdagameanalytics.service;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,7 +27,15 @@ public class UserService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
-    public AuthenticationResponse register(UserRegistrationRequest request) {
+    public AuthenticationResponse register(@Valid UserRegistrationRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new UserAlreadyExistsException("Пользователь с email " + request.getEmail() + " уже существует");
+        }
+
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Пароли не совпадают");
+        }
+
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new UserAlreadyExistsException("Пользователь с email " + request.getEmail() + " уже существует");
         }

@@ -25,7 +25,6 @@ public class User implements UserDetails {
     private String username;
     private String email;
     private String password;
-    private List<Project> projects;
     private UserRole role;
 
     @Override

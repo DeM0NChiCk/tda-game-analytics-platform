@@ -1,16 +1,15 @@
-package ru.itis.tdagameanalytics.dto.response;
+package ru.itis.tdagameanalytics.dto.data;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import ru.itis.tdagameanalytics.dto.data.MetricData;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProjectStatistics {
+public class MetricData {
     private SystemMetrics system;
     private CustomMetrics custom;
     private SessionInfo session;
